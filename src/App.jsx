@@ -7,6 +7,7 @@ import ItemModal from './components/ItemModal';
 import AddItem from './components/AddItem';
 import BucketItem from './components/BucketItem';
 const MapView = lazy(() => import('./components/MapView'));
+const WheelView = lazy(() => import('./components/WheelView'));
 
 const STORAGE_KEY  = 'bucket_list_checks';
 const CUSTOM_KEY   = 'bucket_list_custom';
@@ -36,7 +37,7 @@ export default function App() {
   const [hidden, setHidden]      = useState(loadHidden);
   const [modalId, setModalId]    = useState(null);
   const [synced, setSynced]      = useState(false);
-  const [view, setView]          = useState('list'); // 'list' | 'map'
+  const [view, setView]          = useState('list'); // 'list' | 'map' | 'wheel'
 
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
@@ -133,17 +134,21 @@ export default function App() {
       {/* List / Map toggle */}
       <div className="flex justify-center pt-5 pb-1">
         <div className="flex rounded-full p-1" style={{ backgroundColor: '#E8D5B7' }}>
-          {['list', 'map'].map(v => (
+          {[
+            { id: 'list', label: '☰ List' },
+            { id: 'map', label: '🗺 Map' },
+            { id: 'wheel', label: '🎡 Wheel' },
+          ].map(({ id, label }) => (
             <button
-              key={v}
-              onClick={() => setView(v)}
+              key={id}
+              onClick={() => setView(id)}
               className="px-5 py-1.5 rounded-full text-sm font-semibold transition-all duration-200"
               style={{
-                backgroundColor: view === v ? '#C4614A' : 'transparent',
-                color: view === v ? 'white' : '#7A4030',
+                backgroundColor: view === id ? '#C4614A' : 'transparent',
+                color: view === id ? 'white' : '#7A4030',
               }}
             >
-              {v === 'list' ? '☰ List' : '🗺 Map'}
+              {label}
             </button>
           ))}
         </div>
@@ -157,6 +162,12 @@ export default function App() {
           <p className="text-center mt-3 text-xs" style={{ color: '#A67C60' }}>
             Tap a pin to see the spot • red = to do · green = done
           </p>
+        </div>
+      ) : view === 'wheel' ? (
+        <div className="max-w-lg mx-auto">
+          <Suspense fallback={<div className="text-center py-10" style={{ color: '#A67C60' }}>loading wheel…</div>}>
+            <WheelView checks={checks} customItems={customItems} hidden={hidden} />
+          </Suspense>
         </div>
       ) : (
       <main className="max-w-lg mx-auto px-4 pb-16 pt-6">
