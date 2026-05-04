@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ITEMS, CATEGORIES } from './data/items';
 import { supabase } from './lib/supabase';
 import Header from './components/Header';
@@ -6,6 +6,7 @@ import CategorySection from './components/CategorySection';
 import ItemModal from './components/ItemModal';
 import AddItem from './components/AddItem';
 import BucketItem from './components/BucketItem';
+const MapView = lazy(() => import('./components/MapView'));
 
 const STORAGE_KEY  = 'bucket_list_checks';
 const CUSTOM_KEY   = 'bucket_list_custom';
@@ -35,6 +36,7 @@ export default function App() {
   const [hidden, setHidden]      = useState(loadHidden);
   const [modalId, setModalId]    = useState(null);
   const [synced, setSynced]      = useState(false);
+  const [view, setView]          = useState('list'); // 'list' | 'map'
 
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
@@ -128,6 +130,35 @@ export default function App() {
         </div>
       )}
 
+      {/* List / Map toggle */}
+      <div className="flex justify-center pt-5 pb-1">
+        <div className="flex rounded-full p-1" style={{ backgroundColor: '#E8D5B7' }}>
+          {['list', 'map'].map(v => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className="px-5 py-1.5 rounded-full text-sm font-semibold transition-all duration-200"
+              style={{
+                backgroundColor: view === v ? '#C4614A' : 'transparent',
+                color: view === v ? 'white' : '#7A4030',
+              }}
+            >
+              {v === 'list' ? '☰ List' : '🗺 Map'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'map' ? (
+        <div className="max-w-lg mx-auto px-4 pb-16 pt-4">
+          <Suspense fallback={<div className="text-center py-10" style={{ color: '#A67C60' }}>loading map…</div>}>
+            <MapView checks={checks} onToggle={handleToggle} hidden={hidden} />
+          </Suspense>
+          <p className="text-center mt-3 text-xs" style={{ color: '#A67C60' }}>
+            Tap a pin to see the spot • red = to do · green = done
+          </p>
+        </div>
+      ) : (
       <main className="max-w-lg mx-auto px-4 pb-16 pt-6">
         <AddItem onAdd={handleAdd} />
 
@@ -174,6 +205,8 @@ export default function App() {
           </p>
         </div>
       </main>
+
+      )}
 
       {modalId && <ItemModal itemId={modalId} onClose={() => setModalId(null)} />}
     </div>
