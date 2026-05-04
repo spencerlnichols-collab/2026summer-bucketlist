@@ -42,6 +42,8 @@ export default function App() {
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
     if (!supabase) return;
+
+    // load checks
     supabase.from('checks').select('item_id, checked').then(({ data, error }) => {
       if (error || !data) return;
       const merged = { ...loadLocal() };
@@ -50,7 +52,16 @@ export default function App() {
       saveLocal(merged);
       setSynced(true);
     });
-    const channel = supabase.channel('checks')
+
+    // load custom items
+    supabase.from('custom_items').select('id, name, checked').then(({ data, error }) => {
+      if (error || !data) return;
+      const items = data.map(row => ({ id: row.id, name: row.name, checked: row.checked }));
+      setCustom(items);
+      saveCustom(items);
+    });
+
+    const channel = supabase.channel('all_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checks' }, payload => {
         const row = payload.new;
         if (!row || row.item_id == null) return;
@@ -59,7 +70,34 @@ export default function App() {
           saveLocal(next);
           return next;
         });
-      }).subscribe();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'custom_items' }, payload => {
+        const row = payload.new;
+        setCustom(prev => {
+          if (prev.find(i => i.id === row.id)) return prev;
+          const next = [...prev, { id: row.id, name: row.name, checked: row.checked }];
+          saveCustom(next);
+          return next;
+        });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'custom_items' }, payload => {
+        const row = payload.new;
+        setCustom(prev => {
+          const next = prev.map(i => i.id === row.id ? { ...i, checked: row.checked } : i);
+          saveCustom(next);
+          return next;
+        });
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'custom_items' }, payload => {
+        const row = payload.old;
+        setCustom(prev => {
+          const next = prev.filter(i => i.id !== row.id);
+          saveCustom(next);
+          return next;
+        });
+      })
+      .subscribe();
+
     return () => supabase.removeChannel(channel);
   }, []);
 
@@ -76,19 +114,23 @@ export default function App() {
   // ── Toggle custom ────────────────────────────────────────────────────────
   const handleToggleCustom = useCallback((id) => {
     setCustom(prev => {
+      const item = prev.find(it => it.id === id);
       const next = prev.map(it => it.id === id ? { ...it, checked: !it.checked } : it);
       saveCustom(next);
+      if (supabase && item) supabase.from('custom_items').update({ checked: !item.checked }).eq('id', id).then(() => {});
       return next;
     });
   }, []);
 
   // ── Add custom ───────────────────────────────────────────────────────────
   const handleAdd = useCallback((name) => {
+    const newItem = { id: `custom_${Date.now()}`, name, checked: false };
     setCustom(prev => {
-      const next = [...prev, { id: `custom_${Date.now()}`, name, checked: false }];
+      const next = [...prev, newItem];
       saveCustom(next);
       return next;
     });
+    if (supabase) supabase.from('custom_items').insert(newItem).then(() => {});
   }, []);
 
   // ── Delete custom item ───────────────────────────────────────────────────
@@ -98,6 +140,7 @@ export default function App() {
       saveCustom(next);
       return next;
     });
+    if (supabase) supabase.from('custom_items').delete().eq('id', id).then(() => {});
   }, []);
 
   // ── Hide preset item ─────────────────────────────────────────────────────
