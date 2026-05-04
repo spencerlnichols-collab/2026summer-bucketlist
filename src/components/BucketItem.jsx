@@ -1,4 +1,4 @@
-export default function BucketItem({ item, checked, onToggle, onOpen, onDelete }) {
+export default function BucketItem({ item, checked, onToggle, onOpen, onDelete, upvoteCount = 0, onUpvote, commentCount = 0 }) {
   const isSpecial = item.special;
 
   return (
@@ -43,7 +43,6 @@ export default function BucketItem({ item, checked, onToggle, onOpen, onDelete }
           >
             {item.name}
           </span>
-          {/* info icon — only show if there's a modal to open */}
           {onOpen && (
             <svg
               className="flex-shrink-0 mt-0.5 opacity-30 group-hover:opacity-70 transition-opacity"
@@ -57,6 +56,38 @@ export default function BucketItem({ item, checked, onToggle, onOpen, onDelete }
         </div>
         <span className="text-xs" style={{ color: '#A67C60' }}>{item.tag}</span>
       </div>
+
+      {/* comment badge */}
+      {commentCount > 0 && (
+        <div
+          className="flex-shrink-0 flex items-center gap-0.5 mt-1 cursor-pointer"
+          style={{ color: '#A67C60' }}
+          onClick={() => onOpen && onOpen(item.id)}
+          title={`${commentCount} note${commentCount !== 1 ? 's' : ''}`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+          </svg>
+          <span className="text-xs font-semibold">{commentCount}</span>
+        </div>
+      )}
+
+      {/* upvote button */}
+      {onUpvote && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onUpvote(item.id); }}
+          className="flex-shrink-0 flex flex-col items-center gap-0 opacity-30 hover:opacity-100 transition-opacity"
+          style={{ color: upvoteCount > 0 ? '#C4614A' : '#A67C60', minWidth: '18px' }}
+          aria-label="Upvote"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 4l8 8H4z"/>
+          </svg>
+          {upvoteCount > 0 && (
+            <span className="text-xs font-bold leading-none" style={{ fontSize: '0.65rem' }}>{upvoteCount}</span>
+          )}
+        </button>
+      )}
 
       {/* delete button — appears on hover */}
       {onDelete && (

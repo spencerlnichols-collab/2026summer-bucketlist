@@ -38,6 +38,8 @@ export default function App() {
   const [modalId, setModalId]    = useState(null);
   const [synced, setSynced]      = useState(false);
   const [view, setView]          = useState('list'); // 'list' | 'map' | 'wheel'
+  const [upvotes, setUpvotes]    = useState({});   // { [item_id]: count }
+  const [comments, setComments]  = useState({});   // { [item_id]: [{id, body, created_at}] }
 
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
@@ -59,6 +61,25 @@ export default function App() {
       const items = data.map(row => ({ id: row.id, name: row.name, checked: row.checked }));
       setCustom(items);
       saveCustom(items);
+    });
+
+    // load upvotes
+    supabase.from('upvotes').select('item_id, count').then(({ data }) => {
+      if (!data) return;
+      const map = {};
+      data.forEach(row => { map[row.item_id] = row.count; });
+      setUpvotes(map);
+    });
+
+    // load comments
+    supabase.from('comments').select('id, item_id, body, created_at').order('created_at').then(({ data }) => {
+      if (!data) return;
+      const map = {};
+      data.forEach(row => {
+        if (!map[row.item_id]) map[row.item_id] = [];
+        map[row.item_id].push({ id: row.id, body: row.body, created_at: row.created_at });
+      });
+      setComments(map);
     });
 
     const channel = supabase.channel('all_changes')
@@ -94,6 +115,20 @@ export default function App() {
           const next = prev.filter(i => i.id !== row.id);
           saveCustom(next);
           return next;
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'upvotes' }, payload => {
+        const row = payload.new;
+        if (!row) return;
+        setUpvotes(prev => ({ ...prev, [row.item_id]: row.count }));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
+        const row = payload.new;
+        if (!row) return;
+        setComments(prev => {
+          const existing = prev[row.item_id] || [];
+          if (existing.find(c => c.id === row.id)) return prev;
+          return { ...prev, [row.item_id]: [...existing, { id: row.id, body: row.body, created_at: row.created_at }] };
         });
       })
       .subscribe();
@@ -141,6 +176,24 @@ export default function App() {
       return next;
     });
     if (supabase) supabase.from('custom_items').delete().eq('id', id).then(() => {});
+  }, []);
+
+  // ── Upvote ───────────────────────────────────────────────────────────────
+  const handleUpvote = useCallback((id) => {
+    const key = String(id);
+    setUpvotes(prev => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
+    if (supabase) supabase.rpc('increment_upvote', { p_item_id: key }).then(() => {});
+  }, []);
+
+  // ── Add comment ──────────────────────────────────────────────────────────
+  const handleAddComment = useCallback((itemId, body) => {
+    const key = String(itemId);
+    const newComment = { id: `comment_${Date.now()}`, item_id: key, body, created_at: new Date().toISOString() };
+    setComments(prev => {
+      const existing = prev[key] || [];
+      return { ...prev, [key]: [...existing, { id: newComment.id, body, created_at: newComment.created_at }] };
+    });
+    if (supabase) supabase.from('comments').insert(newComment).then(() => {});
   }, []);
 
   // ── Hide preset item ─────────────────────────────────────────────────────
@@ -235,6 +288,9 @@ export default function App() {
                   checked={item.checked}
                   onToggle={handleToggleCustom}
                   onDelete={handleDeleteCustom}
+                  upvoteCount={upvotes[String(item.id)] || 0}
+                  onUpvote={handleUpvote}
+                  commentCount={0}
                 />
               ))}
             </div>
@@ -250,6 +306,9 @@ export default function App() {
             onToggle={handleToggle}
             onOpen={setModalId}
             onDelete={handleHidePreset}
+            upvotes={upvotes}
+            onUpvote={handleUpvote}
+            comments={comments}
           />
         ))}
 
@@ -262,7 +321,14 @@ export default function App() {
 
       )}
 
-      {modalId && <ItemModal itemId={modalId} onClose={() => setModalId(null)} />}
+      {modalId && (
+        <ItemModal
+          itemId={modalId}
+          onClose={() => setModalId(null)}
+          comments={comments[String(modalId)] || []}
+          onAddComment={handleAddComment}
+        />
+      )}
     </div>
   );
 }

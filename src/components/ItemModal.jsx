@@ -1,7 +1,43 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ITEMS } from '../data/items';
 
-export default function ItemModal({ itemId, onClose }) {
+function CommentInput({ onAdd }) {
+  const [text, setText] = useState('');
+
+  const submit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setText('');
+  };
+
+  return (
+    <div className="flex gap-2 mt-2">
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="Add a note…"
+        rows={2}
+        className="flex-1 rounded-xl px-3 py-2 text-sm resize-none outline-none"
+        style={{ backgroundColor: '#F0E6D3', color: '#5A3520', border: '1px solid #E8C5A8' }}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+      />
+      <button
+        onClick={submit}
+        disabled={!text.trim()}
+        className="px-3 rounded-xl text-sm font-semibold transition-all self-stretch"
+        style={{
+          backgroundColor: text.trim() ? '#C4614A' : '#E8D5B7',
+          color: text.trim() ? 'white' : '#A67C60',
+        }}
+      >
+        Add
+      </button>
+    </div>
+  );
+}
+
+export default function ItemModal({ itemId, onClose, comments = [], onAddComment }) {
   const item = ITEMS.find(i => i.id === itemId);
 
   useEffect(() => {
@@ -87,13 +123,34 @@ export default function ItemModal({ itemId, onClose }) {
           {/* best time */}
           {item.bestTime && (
             <div
-              className="rounded-xl px-4 py-3"
+              className="rounded-xl px-4 py-3 mb-4"
               style={{ backgroundColor: '#F0E6D3' }}
             >
               <h3 className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#A67C60' }}>Best Time to Go</h3>
               <p className="text-sm" style={{ color: '#5A3520' }}>{item.bestTime}</p>
             </div>
           )}
+
+          {/* comments / notes */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#A67C60' }}>
+              Our Notes {comments.length > 0 && `(${comments.length})`}
+            </h3>
+            {comments.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {comments.map(c => (
+                  <div
+                    key={c.id}
+                    className="rounded-xl px-3 py-2 text-sm leading-relaxed"
+                    style={{ backgroundColor: '#F0E6D3', color: '#5A3520' }}
+                  >
+                    {c.body}
+                  </div>
+                ))}
+              </div>
+            )}
+            <CommentInput onAdd={(body) => onAddComment(item.id, body)} />
+          </div>
         </div>
       </div>
     </div>

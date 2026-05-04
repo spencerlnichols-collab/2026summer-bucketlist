@@ -2,9 +2,13 @@ import { useState } from 'react';
 import BucketItem from './BucketItem';
 import ProgressBar from './ProgressBar';
 
-export default function CategorySection({ category, items, checks, onToggle, onOpen, onDelete }) {
+export default function CategorySection({ category, items, checks, onToggle, onOpen, onDelete, upvotes, onUpvote, comments }) {
   const [collapsed, setCollapsed] = useState(false);
   const done = items.filter(i => checks[i.id]).length;
+
+  const sortedItems = [...items].sort((a, b) =>
+    (upvotes[String(b.id)] || 0) - (upvotes[String(a.id)] || 0)
+  );
 
   return (
     <section className="mb-8">
@@ -41,7 +45,7 @@ export default function CategorySection({ category, items, checks, onToggle, onO
 
       {!collapsed && (
         <div className="mt-3 divide-y" style={{ borderColor: '#F0E6D3' }}>
-          {items.map(item => (
+          {sortedItems.map(item => (
             <BucketItem
               key={item.id}
               item={item}
@@ -49,6 +53,9 @@ export default function CategorySection({ category, items, checks, onToggle, onO
               onToggle={onToggle}
               onOpen={onOpen}
               onDelete={onDelete}
+              upvoteCount={upvotes[String(item.id)] || 0}
+              onUpvote={onUpvote}
+              commentCount={(comments[String(item.id)] || []).length}
             />
           ))}
         </div>
