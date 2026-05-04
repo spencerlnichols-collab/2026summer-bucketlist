@@ -37,7 +37,7 @@ function CommentInput({ onAdd }) {
   );
 }
 
-export default function ItemModal({ itemId, onClose, comments = [], onAddComment }) {
+export default function ItemModal({ itemId, onClose, comments = [], onAddComment, onDeleteComment }) {
   const item = ITEMS.find(i => i.id === itemId);
 
   useEffect(() => {
@@ -141,10 +141,21 @@ export default function ItemModal({ itemId, onClose, comments = [], onAddComment
                 {comments.map(c => (
                   <div
                     key={c.id}
-                    className="rounded-xl px-3 py-2 text-sm leading-relaxed"
+                    className="flex items-start gap-2 rounded-xl px-3 py-2 text-sm leading-relaxed group"
                     style={{ backgroundColor: '#F0E6D3', color: '#5A3520' }}
                   >
-                    {c.body}
+                    <span className="flex-1">{c.body}</span>
+                    <button
+                      onClick={() => onDeleteComment && onDeleteComment(c.id, itemId)}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity mt-0.5"
+                      style={{ color: '#7A4030' }}
+                      aria-label="Delete note"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <line x1="2" y1="2" x2="10" y2="10"/>
+                        <line x1="10" y1="2" x2="2" y2="10"/>
+                      </svg>
+                    </button>
                   </div>
                 ))}
               </div>

@@ -1,4 +1,4 @@
-export default function BucketItem({ item, checked, onToggle, onOpen, onDelete, upvoteCount = 0, onUpvote, commentCount = 0 }) {
+export default function BucketItem({ item, checked, onToggle, onOpen, onDelete, upvoteCount = 0, onUpvote, myUpvoted = false, commentCount = 0 }) {
   const isSpecial = item.special;
 
   return (
@@ -76,15 +76,19 @@ export default function BucketItem({ item, checked, onToggle, onOpen, onDelete, 
       {onUpvote && (
         <button
           onClick={(e) => { e.stopPropagation(); onUpvote(item.id); }}
-          className="flex-shrink-0 flex flex-col items-center gap-0 opacity-30 hover:opacity-100 transition-opacity"
-          style={{ color: upvoteCount > 0 ? '#C4614A' : '#A67C60', minWidth: '18px' }}
-          aria-label="Upvote"
+          className="flex-shrink-0 flex flex-col items-center gap-0 transition-opacity"
+          style={{
+            color: myUpvoted ? '#C4614A' : '#A67C60',
+            opacity: myUpvoted ? 1 : 0.3,
+            minWidth: '18px',
+          }}
+          aria-label={myUpvoted ? 'Remove upvote' : 'Upvote'}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 4l8 8H4z"/>
           </svg>
           {upvoteCount > 0 && (
-            <span className="text-xs font-bold leading-none" style={{ fontSize: '0.65rem' }}>{upvoteCount}</span>
+            <span className="font-bold leading-none" style={{ fontSize: '0.65rem' }}>{upvoteCount}</span>
           )}
         </button>
       )}

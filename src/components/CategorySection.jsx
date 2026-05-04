@@ -2,7 +2,7 @@ import { useState } from 'react';
 import BucketItem from './BucketItem';
 import ProgressBar from './ProgressBar';
 
-export default function CategorySection({ category, items, checks, onToggle, onOpen, onDelete, upvotes, onUpvote, comments }) {
+export default function CategorySection({ category, items, checks, onToggle, onOpen, onDelete, upvotes, onUpvote, myUpvotes, comments }) {
   const [collapsed, setCollapsed] = useState(false);
   const done = items.filter(i => checks[i.id]).length;
 
@@ -55,6 +55,7 @@ export default function CategorySection({ category, items, checks, onToggle, onO
               onDelete={onDelete}
               upvoteCount={upvotes[String(item.id)] || 0}
               onUpvote={onUpvote}
+              myUpvoted={myUpvotes.has(String(item.id))}
               commentCount={(comments[String(item.id)] || []).length}
             />
           ))}

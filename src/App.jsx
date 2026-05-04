@@ -12,6 +12,13 @@ const WheelView = lazy(() => import('./components/WheelView'));
 const STORAGE_KEY  = 'bucket_list_checks';
 const CUSTOM_KEY   = 'bucket_list_custom';
 const HIDDEN_KEY   = 'bucket_list_hidden';
+const UPVOTED_KEY  = 'bucket_list_upvoted';
+
+function loadUpvoted() {
+  try { return new Set(JSON.parse(localStorage.getItem(UPVOTED_KEY)) || []); }
+  catch { return new Set(); }
+}
+function saveUpvoted(set) { localStorage.setItem(UPVOTED_KEY, JSON.stringify([...set])); }
 
 function loadLocal() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
@@ -38,8 +45,9 @@ export default function App() {
   const [modalId, setModalId]    = useState(null);
   const [synced, setSynced]      = useState(false);
   const [view, setView]          = useState('list'); // 'list' | 'map' | 'wheel'
-  const [upvotes, setUpvotes]    = useState({});   // { [item_id]: count }
-  const [comments, setComments]  = useState({});   // { [item_id]: [{id, body, created_at}] }
+  const [upvotes, setUpvotes]    = useState({});          // { [item_id]: count }
+  const [comments, setComments]  = useState({});          // { [item_id]: [{id, body, created_at}] }
+  const [myUpvotes, setMyUpvotes] = useState(loadUpvoted); // items this device has upvoted
 
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
@@ -131,6 +139,14 @@ export default function App() {
           return { ...prev, [row.item_id]: [...existing, { id: row.id, body: row.body, created_at: row.created_at }] };
         });
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'comments' }, payload => {
+        const row = payload.old;
+        if (!row) return;
+        setComments(prev => ({
+          ...prev,
+          [row.item_id]: (prev[row.item_id] || []).filter(c => c.id !== row.id),
+        }));
+      })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -178,11 +194,24 @@ export default function App() {
     if (supabase) supabase.from('custom_items').delete().eq('id', id).then(() => {});
   }, []);
 
-  // ── Upvote ───────────────────────────────────────────────────────────────
+  // ── Upvote (toggle) ──────────────────────────────────────────────────────
   const handleUpvote = useCallback((id) => {
     const key = String(id);
-    setUpvotes(prev => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
-    if (supabase) supabase.rpc('increment_upvote', { p_item_id: key }).then(() => {});
+    setMyUpvotes(prev => {
+      const next = new Set(prev);
+      const alreadyVoted = next.has(key);
+      if (alreadyVoted) {
+        next.delete(key);
+        setUpvotes(u => ({ ...u, [key]: Math.max(0, (u[key] || 0) - 1) }));
+        if (supabase) supabase.rpc('decrement_upvote', { p_item_id: key }).then(() => {});
+      } else {
+        next.add(key);
+        setUpvotes(u => ({ ...u, [key]: (u[key] || 0) + 1 }));
+        if (supabase) supabase.rpc('increment_upvote', { p_item_id: key }).then(() => {});
+      }
+      saveUpvoted(next);
+      return next;
+    });
   }, []);
 
   // ── Add comment ──────────────────────────────────────────────────────────
@@ -194,6 +223,16 @@ export default function App() {
       return { ...prev, [key]: [...existing, { id: newComment.id, body, created_at: newComment.created_at }] };
     });
     if (supabase) supabase.from('comments').insert(newComment).then(() => {});
+  }, []);
+
+  // ── Delete comment ───────────────────────────────────────────────────────
+  const handleDeleteComment = useCallback((commentId, itemId) => {
+    const key = String(itemId);
+    setComments(prev => ({
+      ...prev,
+      [key]: (prev[key] || []).filter(c => c.id !== commentId),
+    }));
+    if (supabase) supabase.from('comments').delete().eq('id', commentId).then(() => {});
   }, []);
 
   // ── Hide preset item ─────────────────────────────────────────────────────
@@ -290,6 +329,7 @@ export default function App() {
                   onDelete={handleDeleteCustom}
                   upvoteCount={upvotes[String(item.id)] || 0}
                   onUpvote={handleUpvote}
+                  myUpvoted={myUpvotes.has(String(item.id))}
                   commentCount={0}
                 />
               ))}
@@ -308,6 +348,7 @@ export default function App() {
             onDelete={handleHidePreset}
             upvotes={upvotes}
             onUpvote={handleUpvote}
+            myUpvotes={myUpvotes}
             comments={comments}
           />
         ))}
@@ -327,6 +368,7 @@ export default function App() {
           onClose={() => setModalId(null)}
           comments={comments[String(modalId)] || []}
           onAddComment={handleAddComment}
+          onDeleteComment={handleDeleteComment}
         />
       )}
     </div>
