@@ -8,6 +8,7 @@ import AddItem from './components/AddItem';
 import BucketItem from './components/BucketItem';
 const MapView = lazy(() => import('./components/MapView'));
 const WheelView = lazy(() => import('./components/WheelView'));
+const RecipesView = lazy(() => import('./components/RecipesView'));
 
 const STORAGE_KEY  = 'bucket_list_checks';
 const CUSTOM_KEY   = 'bucket_list_custom';
@@ -48,6 +49,7 @@ export default function App() {
   const [upvotes, setUpvotes]    = useState({});          // { [item_id]: count }
   const [comments, setComments]  = useState({});          // { [item_id]: [{id, body, created_at}] }
   const [myUpvotes, setMyUpvotes] = useState(loadUpvoted); // items this device has upvoted
+  const [recipes, setRecipes]    = useState([]);           // [{id, title, content, category}]
 
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
@@ -69,6 +71,11 @@ export default function App() {
       const items = data.map(row => ({ id: row.id, name: row.name, checked: row.checked }));
       setCustom(items);
       saveCustom(items);
+    });
+
+    // load recipes
+    supabase.from('recipes').select('id, title, content, category, created_at').order('created_at').then(({ data }) => {
+      if (data) setRecipes(data);
     });
 
     // load upvotes
@@ -146,6 +153,16 @@ export default function App() {
           ...prev,
           [row.item_id]: (prev[row.item_id] || []).filter(c => c.id !== row.id),
         }));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'recipes' }, payload => {
+        const row = payload.new;
+        if (!row) return;
+        setRecipes(prev => prev.find(r => r.id === row.id) ? prev : [...prev, row]);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'recipes' }, payload => {
+        const row = payload.old;
+        if (!row) return;
+        setRecipes(prev => prev.filter(r => r.id !== row.id));
       })
       .subscribe();
 
@@ -235,6 +252,19 @@ export default function App() {
     if (supabase) supabase.from('comments').delete().eq('id', commentId).then(() => {});
   }, []);
 
+  // ── Add recipe ───────────────────────────────────────────────────────────
+  const handleAddRecipe = useCallback(({ title, content, category }) => {
+    const newRecipe = { id: `recipe_${Date.now()}`, title, content, category, created_at: new Date().toISOString() };
+    setRecipes(prev => [...prev, newRecipe]);
+    if (supabase) supabase.from('recipes').insert(newRecipe).then(() => {});
+  }, []);
+
+  // ── Delete recipe ─────────────────────────────────────────────────────────
+  const handleDeleteRecipe = useCallback((id) => {
+    setRecipes(prev => prev.filter(r => r.id !== id));
+    if (supabase) supabase.from('recipes').delete().eq('id', id).then(() => {});
+  }, []);
+
   // ── Hide preset item ─────────────────────────────────────────────────────
   const handleHidePreset = useCallback((id) => {
     setHidden(prev => {
@@ -273,6 +303,7 @@ export default function App() {
             { id: 'list', label: '☰ List' },
             { id: 'map', label: '🗺 Map' },
             { id: 'wheel', label: '🎡 Wheel' },
+            { id: 'recipes', label: '📖 Recipes' },
           ].map(({ id, label }) => (
             <button
               key={id}
@@ -304,6 +335,10 @@ export default function App() {
             <WheelView checks={checks} customItems={customItems} hidden={hidden} />
           </Suspense>
         </div>
+      ) : view === 'recipes' ? (
+        <Suspense fallback={<div className="text-center py-10" style={{ color: '#A67C60' }}>loading recipes…</div>}>
+          <RecipesView recipes={recipes} onAdd={handleAddRecipe} onDelete={handleDeleteRecipe} />
+        </Suspense>
       ) : (
       <main className="max-w-lg mx-auto px-4 pb-16 pt-6">
         <AddItem onAdd={handleAdd} />
