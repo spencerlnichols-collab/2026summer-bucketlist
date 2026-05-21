@@ -13,13 +13,20 @@ const RecipesView = lazy(() => import('./components/RecipesView'));
 const STORAGE_KEY  = 'bucket_list_checks';
 const CUSTOM_KEY   = 'bucket_list_custom';
 const HIDDEN_KEY   = 'bucket_list_hidden';
-const UPVOTED_KEY  = 'bucket_list_upvoted';
+const UPVOTED_KEY         = 'bucket_list_upvoted';
+const RECIPE_UPVOTED_KEY  = 'bucket_list_recipe_upvoted';
 
 function loadUpvoted() {
   try { return new Set(JSON.parse(localStorage.getItem(UPVOTED_KEY)) || []); }
   catch { return new Set(); }
 }
 function saveUpvoted(set) { localStorage.setItem(UPVOTED_KEY, JSON.stringify([...set])); }
+
+function loadRecipeUpvoted() {
+  try { return new Set(JSON.parse(localStorage.getItem(RECIPE_UPVOTED_KEY)) || []); }
+  catch { return new Set(); }
+}
+function saveRecipeUpvoted(set) { localStorage.setItem(RECIPE_UPVOTED_KEY, JSON.stringify([...set])); }
 
 function loadLocal() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
@@ -49,7 +56,8 @@ export default function App() {
   const [upvotes, setUpvotes]    = useState({});          // { [item_id]: count }
   const [comments, setComments]  = useState({});          // { [item_id]: [{id, body, created_at}] }
   const [myUpvotes, setMyUpvotes] = useState(loadUpvoted); // items this device has upvoted
-  const [recipes, setRecipes]    = useState([]);           // [{id, title, content, category}]
+  const [recipes, setRecipes]        = useState([]);           // [{id, title, content, instructions, category, votes}]
+  const [myRecipeUpvotes, setMyRecipeUpvotes] = useState(loadRecipeUpvoted);
 
   // ── Supabase bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
@@ -74,7 +82,7 @@ export default function App() {
     });
 
     // load recipes
-    supabase.from('recipes').select('id, title, content, category, created_at').order('created_at').then(({ data }) => {
+    supabase.from('recipes').select('id, title, content, instructions, category, votes, created_at').order('created_at').then(({ data }) => {
       if (data) setRecipes(data);
     });
 
@@ -158,6 +166,11 @@ export default function App() {
         const row = payload.new;
         if (!row) return;
         setRecipes(prev => prev.find(r => r.id === row.id) ? prev : [...prev, row]);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'recipes' }, payload => {
+        const row = payload.new;
+        if (!row) return;
+        setRecipes(prev => prev.map(r => r.id === row.id ? { ...r, votes: row.votes } : r));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'recipes' }, payload => {
         const row = payload.old;
@@ -253,10 +266,29 @@ export default function App() {
   }, []);
 
   // ── Add recipe ───────────────────────────────────────────────────────────
-  const handleAddRecipe = useCallback(({ title, content, category }) => {
-    const newRecipe = { id: `recipe_${Date.now()}`, title, content, category, created_at: new Date().toISOString() };
+  const handleAddRecipe = useCallback(({ title, content, instructions, category }) => {
+    const newRecipe = { id: `recipe_${Date.now()}`, title, content, instructions: instructions || null, category, votes: 0, created_at: new Date().toISOString() };
     setRecipes(prev => [...prev, newRecipe]);
     if (supabase) supabase.from('recipes').insert(newRecipe).then(() => {});
+  }, []);
+
+  // ── Upvote recipe (toggle) ────────────────────────────────────────────────
+  const handleRecipeUpvote = useCallback((id) => {
+    setMyRecipeUpvotes(prev => {
+      const next = new Set(prev);
+      const alreadyVoted = next.has(id);
+      if (alreadyVoted) {
+        next.delete(id);
+        setRecipes(r => r.map(rec => rec.id === id ? { ...rec, votes: Math.max(0, (rec.votes || 0) - 1) } : rec));
+        if (supabase) supabase.rpc('decrement_recipe_vote', { p_recipe_id: id }).then(() => {});
+      } else {
+        next.add(id);
+        setRecipes(r => r.map(rec => rec.id === id ? { ...rec, votes: (rec.votes || 0) + 1 } : rec));
+        if (supabase) supabase.rpc('increment_recipe_vote', { p_recipe_id: id }).then(() => {});
+      }
+      saveRecipeUpvoted(next);
+      return next;
+    });
   }, []);
 
   // ── Delete recipe ─────────────────────────────────────────────────────────
@@ -337,7 +369,7 @@ export default function App() {
         </div>
       ) : view === 'recipes' ? (
         <Suspense fallback={<div className="text-center py-10" style={{ color: '#A67C60' }}>loading recipes…</div>}>
-          <RecipesView recipes={recipes} onAdd={handleAddRecipe} onDelete={handleDeleteRecipe} />
+          <RecipesView recipes={recipes} onAdd={handleAddRecipe} onDelete={handleDeleteRecipe} onUpvote={handleRecipeUpvote} myRecipeUpvotes={myRecipeUpvotes} />
         </Suspense>
       ) : (
       <main className="max-w-lg mx-auto px-4 pb-16 pt-6">
